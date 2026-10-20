@@ -6,7 +6,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: "inherit", cwd: root, shell: process.platform === "win32", ...opts });
+// Windows needs a shell to find npm.cmd, but not for ssh/scp: cmd.exe would swallow their remote `;` and `>` itself.
+const needsShell = (cmd) => process.platform === "win32" && cmd === "npm";
+const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: "inherit", cwd: root, shell: needsShell(cmd), ...opts });
 
 const host =
   process.env.DEPLOY_HOST ||

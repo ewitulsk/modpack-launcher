@@ -7,7 +7,7 @@ variable "name" {
 variable "region" {
   description = "DigitalOcean region slug."
   type        = string
-  default     = "nyc3"
+  default     = "tor1" # nyc regions do not offer s-1vcpu-512mb-10gb
 }
 
 variable "size" {
