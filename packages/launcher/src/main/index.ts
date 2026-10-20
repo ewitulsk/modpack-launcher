@@ -225,14 +225,35 @@ const handlers: Record<string, Handler> = {
   },
   "auth:importCurseforge": async () => {
     const { accounts, notes } = await importCurseforgeAccounts();
+    const imported: string[] = [];
     for (const a of accounts) {
-      // Don't swap a refreshable account for one that dies when its token does; just lend it the newer token.
       const existing = (await settings.get()).accounts.find((x) => x.id === a.id);
+      if (a.msRefreshToken) {
+        // Imported a Microsoft refresh token from CurseForge's encrypted sign-in. Prove it works by
+        // refreshing now (mcExpiresAt is 0 unless CurseForge also left a live token), then keep it.
+        try {
+          const fresh = await ensureFresh(fetch, a);
+          await saveAccount(fresh);
+          imported.push(a.name);
+        } catch (e) {
+          notes.push(
+            (e as Error).message.includes("grant is expired")
+              ? `${a.name}'s CurseForge sign-in has expired; launch Minecraft from CurseForge once, then import again.`
+              : `${a.name} couldn't be signed in: ${(e as Error).message}`,
+          );
+        }
+        continue;
+      }
+      // No refresh token: don't swap a refreshable account for one that dies when its token does;
+      // just lend it the newer token.
       if (existing?.msRefreshToken) {
         if (a.mcExpiresAt > existing.mcExpiresAt) await saveAccount({ ...existing, mcAccessToken: a.mcAccessToken, mcExpiresAt: a.mcExpiresAt });
-      } else await saveAccount(a);
+      } else {
+        await saveAccount(a);
+        imported.push(a.name);
+      }
     }
-    return { settings: publicSettings(await settings.get()), imported: accounts.map((a) => a.name), notes };
+    return { settings: publicSettings(await settings.get()), imported, notes };
   },
   "auth:select": async (id: string) => publicSettings(await settings.update({ selectedAccountId: id })),
   "auth:remove": async (id: string) => {

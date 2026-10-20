@@ -51,7 +51,7 @@ export function Accounts({ settings, onChange }: { settings: PublicSettings; onC
               onChange(r.settings);
               setMessage(
                 r.imported.length
-                  ? `Imported ${r.imported.join(", ")} from CurseForge. CurseForge sign-ins last about a day here; import again or sign in with Microsoft when it runs out.`
+                  ? `Imported ${r.imported.join(", ")} from CurseForge — including its Microsoft sign-in, so it stays signed in here too.`
                   : `Nothing to import. ${r.notes.join(" ")}`,
               );
             })

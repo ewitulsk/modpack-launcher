@@ -24,6 +24,8 @@ export interface Account {
   kind: MsaKind;
   clientId: string;
   msRefreshToken: string;
+  /** OAuth scope for refreshing msRefreshToken; defaults per kind. CurseForge accounts need their own. */
+  msScope?: string;
   mcAccessToken: string;
   /** epoch ms */
   mcExpiresAt: number;
@@ -79,20 +81,20 @@ export const exchangeLiveCode = (fetcher: Fetcher, code: string) =>
     scope: LIVE_SCOPE,
   });
 
-export function refreshMs(fetcher: Fetcher, kind: MsaKind, clientId: string, refreshToken: string) {
+export function refreshMs(fetcher: Fetcher, kind: MsaKind, clientId: string, refreshToken: string, scope?: string) {
   return kind === "live"
     ? form<MsToken>(fetcher, LIVE_TOKEN, {
         client_id: clientId,
         refresh_token: refreshToken,
         grant_type: "refresh_token",
         redirect_uri: LIVE_REDIRECT,
-        scope: LIVE_SCOPE,
+        scope: scope ?? LIVE_SCOPE,
       })
     : form<MsToken>(fetcher, `${AZURE}/token`, {
         client_id: clientId,
         refresh_token: refreshToken,
         grant_type: "refresh_token",
-        scope: "XboxLive.signin offline_access",
+        scope: scope ?? "XboxLive.signin offline_access",
       });
 }
 
@@ -213,11 +215,11 @@ export async function ensureFresh(fetcher: Fetcher, account: Account): Promise<A
   if (!account.msRefreshToken) {
     throw new AuthError(
       account.source === "curseforge-app"
-        ? `${account.name}'s CurseForge sign-in expired. Launch Minecraft from CurseForge once and import again, or sign in with Microsoft here.`
+        ? `${account.name}'s CurseForge sign-in expired. Sign in with Microsoft here, or import from the Modrinth App.`
         : `${account.name}'s sign-in expired. Sign in again.`,
     );
   }
-  const ms = await refreshMs(fetcher, account.kind, account.clientId, account.msRefreshToken);
+  const ms = await refreshMs(fetcher, account.kind, account.clientId, account.msRefreshToken, account.msScope);
   const fresh = await accountFromMs(fetcher, account.kind, account.clientId, ms);
   return { ...fresh, source: account.source };
 }
