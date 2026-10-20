@@ -1,0 +1,26 @@
+{
+  "name": "modpack-launcher",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Friends-only Minecraft modpack launcher with remixable packs.",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/patch-xmcl.mjs",
+    "build": "npm run build -w @remix/core && npm run build -w @remix/backend && npm run build -w @remix/launcher",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev:backend": "npm run dev -w @remix/backend",
+    "dev:launcher": "npm run dev -w @remix/launcher",
+    "deploy": "node scripts/deploy.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "overrides": {
+    "@xmcl/yauzl": "2.10.0",
+    "@xmcl/unzip": "2.1.2"
+  }
+}

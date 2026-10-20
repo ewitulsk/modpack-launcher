@@ -1,0 +1,48 @@
+#cloud-config
+package_update: true
+packages: [curl, ca-certificates, sqlite3]
+
+write_files:
+  - path: /etc/remix/env
+    permissions: "0600"
+    content: |
+      NODE_ENV=production
+      PORT=80
+      PUBLIC_URL=${public_url}
+      DATA_DIR=/var/lib/remix
+      ADMIN_TOKEN=${admin_token}
+      ADMIN_USERNAME=${admin_username}
+      ADMIN_PASSWORD=${admin_password}
+      CURSEFORGE_API_KEY=${curseforge_api_key}
+      NODE_OPTIONS=--max-old-space-size=320 --disable-warning=ExperimentalWarning
+
+  - path: /etc/systemd/system/remix.service
+    content: |
+      [Unit]
+      Description=Remix pack server
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      EnvironmentFile=/etc/remix/env
+      ExecStart=/usr/bin/node /opt/remix/server.mjs
+      WorkingDirectory=/var/lib/remix
+      DynamicUser=yes
+      StateDirectory=remix
+      AmbientCapabilities=CAP_NET_BIND_SERVICE
+      Restart=always
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  # 512 MB droplet: add 1 GB of swap so resolving big packs never OOMs.
+  - fallocate -l 1G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+  - echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  - curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+  - apt-get install -y nodejs
+  - mkdir -p /opt/remix
+  # The service waits (restarting) until `npm run deploy` copies server.mjs over.
+  - systemctl daemon-reload
+  - systemctl enable --now remix

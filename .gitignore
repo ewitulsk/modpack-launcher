@@ -1,0 +1,16 @@
+node_modules/
+dist/
+out/
+*.log
+.env
+.blobs/
+release/
+.smoke/
+.env.production
+.smoke-remixes/
+.data/
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+.sync/

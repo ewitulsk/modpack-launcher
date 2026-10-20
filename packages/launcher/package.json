@@ -1,0 +1,56 @@
+{
+  "name": "@remix/launcher",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Friends-only modpack launcher: sign in, sync remixed packs, play.",
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "predev": "node -e \"require('electron')\"",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "vitest run",
+    "smoke": "tsx scripts/smoke.ts",
+    "dist": "electron-vite build && electron-builder --win"
+  },
+  "dependencies": {
+    "@remix/core": "0.1.0",
+    "@xmcl/core": "^2.16.2",
+    "@xmcl/installer": "^6.3.6",
+    "fflate": "^0.8.3",
+    "sql.js": "^1.15.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/sql.js": "^1.4.9",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^6.0.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
+  },
+  "build": {
+    "appId": "dev.remix.launcher",
+    "productName": "Remix Launcher",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true
+    }
+  }
+}
