@@ -19,7 +19,7 @@ export interface PublicSettings {
   /** A pack key is saved or built in. */
   hasPackKey: boolean;
   displayName: string;
-  accounts: { id: string; name: string; source: "signin" | "modrinth-app" }[];
+  accounts: { id: string; name: string; source: "signin" | "modrinth-app" | "curseforge-app" }[];
   selectedAccountId: string | null;
   msaClientId: string;
   memoryMb: number;

@@ -14,6 +14,7 @@ import {
   startDeviceCode,
   type Account,
 } from "./auth/microsoft.js";
+import { importCurseforgeAccounts } from "./auth/curseforge-app.js";
 import { importModrinthAccounts } from "./auth/modrinth-app.js";
 import { DEFAULT_CAPTURE_IGNORE, captureChanges } from "./game/capture.js";
 import { installGame } from "./game/install.js";
@@ -220,6 +221,17 @@ const handlers: Record<string, Handler> = {
   "auth:importModrinth": async () => {
     const { accounts, notes } = await importModrinthAccounts();
     for (const a of accounts) await saveAccount(a);
+    return { settings: publicSettings(await settings.get()), imported: accounts.map((a) => a.name), notes };
+  },
+  "auth:importCurseforge": async () => {
+    const { accounts, notes } = await importCurseforgeAccounts();
+    for (const a of accounts) {
+      // Don't swap a refreshable account for one that dies when its token does; just lend it the newer token.
+      const existing = (await settings.get()).accounts.find((x) => x.id === a.id);
+      if (existing?.msRefreshToken) {
+        if (a.mcExpiresAt > existing.mcExpiresAt) await saveAccount({ ...existing, mcAccessToken: a.mcAccessToken, mcExpiresAt: a.mcExpiresAt });
+      } else await saveAccount(a);
+    }
     return { settings: publicSettings(await settings.get()), imported: accounts.map((a) => a.name), notes };
   },
   "auth:select": async (id: string) => publicSettings(await settings.update({ selectedAccountId: id })),

@@ -28,7 +28,7 @@ export interface Account {
   /** epoch ms */
   mcExpiresAt: number;
   /** Where it came from, for the UI. */
-  source: "signin" | "modrinth-app";
+  source: "signin" | "modrinth-app" | "curseforge-app";
 }
 
 export interface MsToken {
@@ -210,7 +210,13 @@ export async function accountFromMs(fetcher: Fetcher, kind: MsaKind, clientId: s
 /** Returns an account with a Minecraft token good for at least 10 more minutes, refreshing if needed. */
 export async function ensureFresh(fetcher: Fetcher, account: Account): Promise<Account> {
   if (account.mcExpiresAt - Date.now() > 10 * 60_000) return account;
-  if (!account.msRefreshToken) throw new AuthError(`${account.name}'s sign-in expired. Sign in again.`);
+  if (!account.msRefreshToken) {
+    throw new AuthError(
+      account.source === "curseforge-app"
+        ? `${account.name}'s CurseForge sign-in expired. Launch Minecraft from CurseForge once and import again, or sign in with Microsoft here.`
+        : `${account.name}'s sign-in expired. Sign in again.`,
+    );
+  }
   const ms = await refreshMs(fetcher, account.kind, account.clientId, account.msRefreshToken);
   const fresh = await accountFromMs(fetcher, account.kind, account.clientId, ms);
   return { ...fresh, source: account.source };

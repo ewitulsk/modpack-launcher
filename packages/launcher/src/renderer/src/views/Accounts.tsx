@@ -43,6 +43,22 @@ export function Accounts({ settings, onChange }: { settings: PublicSettings; onC
         >
           Import from Modrinth App
         </button>
+        <button
+          disabled={!!busy}
+          onClick={() =>
+            run("import", async () => {
+              const r = await invoke<{ settings: PublicSettings; imported: string[]; notes: string[] }>("auth:importCurseforge");
+              onChange(r.settings);
+              setMessage(
+                r.imported.length
+                  ? `Imported ${r.imported.join(", ")} from CurseForge. CurseForge sign-ins last about a day here; import again or sign in with Microsoft when it runs out.`
+                  : `Nothing to import. ${r.notes.join(" ")}`,
+              );
+            })
+          }
+        >
+          Import from CurseForge
+        </button>
       </div>
       {deviceCode && (
         <div className="card notice">
@@ -57,7 +73,7 @@ export function Accounts({ settings, onChange }: { settings: PublicSettings; onC
             <img src={`https://mc-heads.net/avatar/${a.id}/32`} alt="" />
             <div className="grow">
               <strong>{a.name}</strong>
-              <small>{a.source === "modrinth-app" ? "Imported from Modrinth App" : "Signed in here"}</small>
+              <small>{a.source === "modrinth-app" ? "Imported from Modrinth App" : a.source === "curseforge-app" ? "Imported from CurseForge" : "Signed in here"}</small>
             </div>
             {a.id !== settings.selectedAccountId && <button onClick={async () => onChange(await invoke("auth:select", a.id))}>Use</button>}
             <button className="ghost" onClick={async () => onChange(await invoke("auth:remove", a.id))}>Remove</button>

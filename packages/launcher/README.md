@@ -31,6 +31,7 @@ Logins are remembered per server, so switching between local and real servers ke
 | `src/main/index.ts` | Electron main process and IPC handlers |
 | `src/main/auth/microsoft.ts` | Microsoft → Xbox → Minecraft sign-in, token refresh |
 | `src/main/auth/modrinth-app.ts` | Import accounts from the Modrinth App's `app.db` |
+| `src/main/auth/curseforge-app.ts` | Import accounts from CurseForge's bundled launcher (`~/curseforge/minecraft/Install/launcher_accounts.json`); Minecraft token only, so they last until it expires (about a day) |
 | `src/main/game/sync.ts` | Sync an instance to a lockfile; blocked-mod helper |
 | `src/main/game/install.ts` | Minecraft, Fabric/Quilt/Forge/NeoForge and Mojang Java via @xmcl |
 | `src/main/game/capture.ts` | "Capture changes": instance folder diff → remix ops |

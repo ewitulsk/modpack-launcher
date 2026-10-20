@@ -5,6 +5,7 @@ import initSqlJs from "sql.js";
 import { describe, expect, it } from "vitest";
 import type { Fetcher } from "@remix/core";
 import { AuthError, accountFromMs, ensureFresh, liveAuthorizeUrl, type Account } from "../src/main/auth/microsoft.js";
+import { importCurseforgeAccounts } from "../src/main/auth/curseforge-app.js";
 import { importModrinthAccounts } from "../src/main/auth/modrinth-app.js";
 
 function chain(opts: { xstsErr?: number; owns?: boolean } = {}) {
@@ -77,6 +78,40 @@ describe("Modrinth App import", () => {
 
   it("says so when the Modrinth App isn't installed", async () => {
     const r = await importModrinthAccounts(["/nope/app.db"]);
+    expect(r.accounts).toEqual([]);
+    expect(r.notes[0]).toMatch(/not found/);
+  });
+});
+
+describe("CurseForge import", () => {
+  const now = Date.parse("2026-10-20T00:00:00Z");
+  async function launcherAccounts(accounts: Record<string, unknown>) {
+    const dir = await mkdtemp(join(tmpdir(), "cf-app-"));
+    const path = join(dir, "launcher_accounts.json");
+    await writeFile(path, JSON.stringify({ accounts, activeAccountLocalId: "a", mojangClientToken: "x" }));
+    return path;
+  }
+
+  it("reads Java profiles and their Minecraft tokens from the bundled launcher", async () => {
+    const path = await launcherAccounts({
+      a: { accessToken: "eyJhbGc.cf", accessTokenExpiresAt: "2026-10-20T20:00:00Z", minecraftProfile: { id: "12345678-1234-1234-1234-123456789abc", name: "Evan" }, type: "Xbox" },
+      b: { accessToken: "eyJhbGc.old", accessTokenExpiresAt: "2026-10-19T00:00:00Z", minecraftProfile: { id: "ffff", name: "Stale" } },
+      c: { accessToken: "eyJhbGc.nojava", accessTokenExpiresAt: "2026-10-21T00:00:00Z", username: "someone@example.com" },
+    });
+    const r = await importCurseforgeAccounts(["/nope/launcher_accounts.json", path], now);
+    expect(r.accounts).toEqual([
+      { id: "12345678123412341234123456789abc", name: "Evan", kind: "live", clientId: "00000000402b5328", msRefreshToken: "", mcAccessToken: "eyJhbGc.cf", mcExpiresAt: Date.parse("2026-10-20T20:00:00Z"), source: "curseforge-app" },
+    ]);
+    expect(r.notes.join(" ")).toMatch(/Stale's CurseForge sign-in has expired/);
+  });
+
+  it("asks for a fresh sign-in once an imported token runs out", async () => {
+    const a: Account = { id: "x", name: "Evan", kind: "live", clientId: "c", msRefreshToken: "", mcAccessToken: "eyJ", mcExpiresAt: 0, source: "curseforge-app" };
+    await expect(ensureFresh(chain().fetcher, a)).rejects.toThrow(/import again/);
+  });
+
+  it("says so when CurseForge isn't installed", async () => {
+    const r = await importCurseforgeAccounts(["/nope/launcher_accounts.json"]);
     expect(r.accounts).toEqual([]);
     expect(r.notes[0]).toMatch(/not found/);
   });
