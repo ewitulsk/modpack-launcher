@@ -32,6 +32,7 @@ const app = buildApp({
   curseforge: env.CURSEFORGE_API_KEY ? new CurseForgeClient(env.CURSEFORGE_API_KEY) : undefined,
   adminToken: env.ADMIN_TOKEN,
   adminUsername,
+  packKey: env.PACK_KEY || undefined,
   logger: true,
 });
 
@@ -44,4 +45,4 @@ process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 
 await app.listen({ port, host: env.HOST ?? "0.0.0.0" });
-app.log.info(`Public URL ${publicUrl}; data in ${dataDir}; CurseForge ${env.CURSEFORGE_API_KEY ? "on" : "off (no key)"}`);
+app.log.info(`Public URL ${publicUrl}; data in ${dataDir}; CurseForge ${env.CURSEFORGE_API_KEY ? "on" : "off (no key)"}; pack key ${env.PACK_KEY ? "required" : "off"}`);

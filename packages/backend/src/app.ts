@@ -3,13 +3,15 @@ import { z } from "zod";
 import {
   Remix,
   resolveRemix,
+  sameContent,
   sha256,
   type BlobStore,
   type CurseForgeClient,
   type Fetcher,
+  type Lockfile,
   type ModrinthClient,
 } from "@remix/core";
-import { Conflict, type Pack, type Store, type User } from "./store.js";
+import { Conflict, type Changes, type Pack, type Store, type User } from "./store.js";
 
 export interface AppDeps {
   store: Store;
@@ -20,6 +22,8 @@ export interface AppDeps {
   adminToken: string;
   /** Username of the admin account the admin token maps to. */
   adminUsername?: string;
+  /** Shared key everyone needs to browse and download packs. Unset means downloads are open. */
+  packKey?: string;
   /** Serve GET /blobs/* from `blobs` (local disk mode). */
   serveBlobs?: boolean;
   fetcher?: Fetcher;
@@ -34,7 +38,12 @@ const slugify = (s: string) =>
     .replace(/^-|-$/g, "")
     .slice(0, 48) || "pack";
 
-const PublishBody = z.object({ remix: z.unknown(), changelog: z.string().default("") });
+const PublishBody = z.object({
+  remix: z.unknown(),
+  changelog: z.string().default(""),
+  /** Optional human name for the version, like "1.2" or "Create update". */
+  version: z.string().trim().max(40).optional(),
+});
 const Username = z
   .string()
   .trim()
@@ -49,9 +58,25 @@ declare module "fastify" {
 }
 
 /**
- * Anyone can browse packs and download lockfiles and blobs.
+ * Browsing and downloading packs needs the shared pack key (or an account).
  * Publishing needs an account, and an account needs an invite code.
  */
+/** What a player's launcher will fetch or delete when updating from `prev` to `next`. */
+export function diffLockfiles(prev: Lockfile, next: Lockfile): Changes {
+  const before = new Map(prev.files.map((e) => [e.path, e]));
+  const out: Changes = { added: [], updated: [], removed: [], downloadBytes: 0 };
+  for (const e of next.files) {
+    const old = before.get(e.path);
+    if (!old) out.added.push(e.path);
+    else if (!e.installOnce && !sameContent(old, e)) out.updated.push(e.path);
+    else continue;
+    out.downloadBytes += e.size ?? 0;
+  }
+  const nextPaths = new Set(next.files.map((e) => e.path));
+  for (const e of prev.files) if (!nextPaths.has(e.path) && !e.installOnce) out.removed.push(e.path);
+  return out;
+}
+
 export function buildApp(deps: AppDeps) {
   const app = Fastify({ logger: deps.logger ?? false, bodyLimit: 8 * 1024 * 1024 });
   const maxUpload = deps.maxUploadBytes ?? 1024 * 1024 * 1024;
@@ -76,6 +101,13 @@ export function buildApp(deps: AppDeps) {
   const admin = async (req: FastifyRequest, reply: FastifyReply) => {
     if (!req.user) return reply.code(401).send({ error: "Sign in to your account first." });
     if (!req.user.isAdmin) return reply.code(403).send({ error: "Only the admin can do that." });
+  };
+  /** The shared pack key, sent as X-Pack-Key (or ?key=). Signed-in accounts don't need it. */
+  const downloader = async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!deps.packKey || req.user) return;
+    const key = req.headers["x-pack-key"] ?? (req.query as { key?: string } | undefined)?.key;
+    if (key !== deps.packKey)
+      return reply.code(401).send({ error: "This server needs the pack key. Ask Evan for it.", code: "pack-key" });
   };
   const canEdit = (user: User, pack: Pack) => user.isAdmin || pack.ownerId === user.id;
 
@@ -103,7 +135,7 @@ export function buildApp(deps: AppDeps) {
 
   const parseRev = (rev: string) => (rev === "latest" ? "latest" : Number(rev));
 
-  app.get("/health", async () => ({ ok: true, curseforge: Boolean(deps.curseforge) }));
+  app.get("/health", async () => ({ ok: true, curseforge: Boolean(deps.curseforge), packKey: Boolean(deps.packKey) }));
 
   // --- accounts ------------------------------------------------------------
 
@@ -129,17 +161,17 @@ export function buildApp(deps: AppDeps) {
 
   app.get("/me", { preHandler: account }, async (req) => req.user);
 
-  // --- public: browse and download -----------------------------------------
+  // --- pack key: browse and download -----------------------------------------
 
-  app.get("/packs", async () => deps.store.listPacks());
+  app.get("/packs", { preHandler: downloader }, async () => deps.store.listPacks());
 
-  app.get<{ Params: { pack: string } }>("/packs/:pack", async (req, reply) => {
+  app.get<{ Params: { pack: string } }>("/packs/:pack", { preHandler: downloader }, async (req, reply) => {
     const pack = findPack(req.params.pack, reply);
     if (!pack) return;
     return { ...pack, revisions: deps.store.listRevisions(pack.id) };
   });
 
-  app.get<{ Params: { pack: string; rev: string } }>("/packs/:pack/revisions/:rev", async (req, reply) => {
+  app.get<{ Params: { pack: string; rev: string } }>("/packs/:pack/revisions/:rev", { preHandler: downloader }, async (req, reply) => {
     const pack = findPack(req.params.pack, reply);
     if (!pack) return;
     const rev = parseRev(req.params.rev);
@@ -151,6 +183,7 @@ export function buildApp(deps: AppDeps) {
 
   app.get<{ Params: { pack: string; rev: string }; Querystring: { side?: string } }>(
     "/packs/:pack/revisions/:rev/lockfile",
+    { preHandler: downloader },
     async (req, reply) => {
       const pack = findPack(req.params.pack, reply);
       if (!pack) return;
@@ -163,7 +196,7 @@ export function buildApp(deps: AppDeps) {
   );
 
   if (deps.serveBlobs) {
-    app.get<{ Params: { prefix: string; hex: string } }>("/blobs/:prefix/:hex", async (req, reply) => {
+    app.get<{ Params: { prefix: string; hex: string } }>("/blobs/:prefix/:hex", { preHandler: downloader }, async (req, reply) => {
       try {
         const data = await deps.blobs.get(req.params.hex);
         return reply.type("application/octet-stream").send(Buffer.from(data));
@@ -203,10 +236,13 @@ export function buildApp(deps: AppDeps) {
     const body = PublishBody.parse(req.body);
     const remix = Remix.parse(body.remix);
     const resolved = await resolveBoth(remix);
+    const prev = deps.store.getRevision(pack.id, "latest");
     const { remix: _r, client: _c, server: _s, ...summary } = deps.store.addRevision(pack.id, {
       remix,
       ...resolved,
       changelog: body.changelog,
+      version: body.version || undefined,
+      changes: prev ? diffLockfiles(prev.client, resolved.client) : undefined,
       publishedBy: req.user!.username,
     });
     return reply.code(201).send(summary);

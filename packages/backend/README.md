@@ -20,20 +20,21 @@ npm run bundle -w @remix/backend  # dist/server.mjs, what `npm run deploy` ships
 | `ADMIN_USERNAME` | `admin` | The admin account, created on start. |
 | `ADMIN_PASSWORD` | `dev` outside production | Sets the admin's password so they can sign in from the launcher. |
 | `CURSEFORGE_API_KEY` | none | Enables CurseForge bases. |
+| `PACK_KEY` | none (open) | Shared key launchers must send (`X-Pack-Key` header or `?key=`) to browse and download packs. Accounts don't need it. |
 
 ## API
 
 | Route | Who | |
 | --- | --- | --- |
 | `GET /health` | anyone | |
-| `GET /packs`, `GET /packs/:pack` | anyone | `:pack` is the id or slug |
-| `GET /packs/:pack/revisions/:rev[/lockfile?side=server]` | anyone | `:rev` is a number or `latest` |
-| `GET /blobs/:xx/:sha256` | anyone | uploaded files |
+| `GET /packs`, `GET /packs/:pack` | pack key | `:pack` is the id or slug |
+| `GET /packs/:pack/revisions/:rev[/lockfile?side=server]` | pack key | `:rev` is a number or `latest` |
+| `GET /blobs/:xx/:sha256` | pack key | uploaded files |
 | `POST /accounts/register` `{code, username, password}` | anyone with an invite | → `{token, user}` |
 | `POST /accounts/login` `{username, password}` | anyone | → `{token, user}` |
 | `POST /accounts/logout`, `GET /me` | account | |
 | `POST /packs` `{name, description}` | account | you own the pack |
 | `POST /resolve/preview` `{remix}` | account | dry run |
-| `POST /packs/:pack/revisions` `{remix, changelog}` | pack owner or admin | |
+| `POST /packs/:pack/revisions` `{remix, changelog, version?}` | pack owner or admin | Each publish is a new immutable version; the summary includes `changes` vs. the previous one. |
 | `HEAD/PUT /blobs/:sha256` | account | upload (`application/octet-stream`, hash checked) |
 | `POST /invites`, `GET /invites`, `GET /users` | admin | |

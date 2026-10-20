@@ -1,5 +1,8 @@
 interface ImportMetaEnv {
+  /** From packages/launcher/.env.production at build time; see README. */
   readonly MAIN_VITE_SERVER_URL?: string;
+  /** Shared pack key baked into friends' builds (never commit it). */
+  readonly MAIN_VITE_PACK_KEY?: string;
 }
 
 interface ImportMeta {

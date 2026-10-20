@@ -38,6 +38,7 @@ export function Admin({ me }: { me: Me }) {
   const [packId, setPackId] = useState("");
   const [text, setText] = useState("");
   const [changelog, setChangelog] = useState("");
+  const [version, setVersion] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -188,21 +189,33 @@ export function Admin({ me }: { me: Me }) {
           )}
           {warnings.length > 0 && <ul className="warnings">{warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
           <div className="row">
-            <input className="grow" value={changelog} onChange={(e) => setChangelog(e.target.value)} placeholder="What changed in this revision?" />
+            <input value={version} onChange={(e) => setVersion(e.target.value)} placeholder="Version name (optional, e.g. 1.2)" />
+            <input className="grow" value={changelog} onChange={(e) => setChangelog(e.target.value)} placeholder="What changed in this version?" />
             <button
               className="primary"
               disabled={busy}
               onClick={() =>
                 run("Publishing…", async () => {
-                  const r = await invoke<{ revision: number; warnings: string[] }>("admin:publish", pack.id, remix(), changelog);
+                  const r = await invoke<{ revision: number; version?: string; warnings: string[]; changes?: { added: string[]; updated: string[]; removed: string[] } }>(
+                    "admin:publish",
+                    pack.id,
+                    remix(),
+                    changelog,
+                    version.trim() || undefined,
+                  );
                   setWarnings(r.warnings);
                   setChangelog("");
+                  setVersion("");
                   setSummary([]);
-                  setStatus(`Published r${r.revision}. Friends get it next time they press Play.`);
+                  const c = r.changes;
+                  setStatus(
+                    `Published ${r.version ?? `r${r.revision}`}. ` +
+                      (c ? `Friends fetch only the ${c.added.length + c.updated.length} new or changed files next time they press Play.` : "Friends get it next time they press Play."),
+                  );
                 })
               }
             >
-              Publish revision
+              Publish version
             </button>
           </div>
         </>

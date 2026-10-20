@@ -16,6 +16,8 @@ export interface PublicSettings {
   hasServer: boolean;
   /** Signed in to a pack account (needed to publish, not to play). */
   signedIn: boolean;
+  /** A pack key is saved or built in. */
+  hasPackKey: boolean;
   displayName: string;
   accounts: { id: string; name: string; source: "signin" | "modrinth-app" }[];
   selectedAccountId: string | null;
@@ -37,6 +39,7 @@ export interface PackSummary {
   ownerId: string;
   ownerName: string;
   latestRevision: number | null;
+  latestVersion: string | null;
   installedRevision: number | null;
 }
 
@@ -46,8 +49,17 @@ export interface Me {
   isAdmin: boolean;
 }
 
+export interface Changes {
+  added: string[];
+  updated: string[];
+  removed: string[];
+  downloadBytes: number;
+}
+
 export interface RevisionSummary {
   revision: number;
+  version?: string;
+  changes?: Changes;
   changelog: string;
   warnings: string[];
   minecraft: string;
@@ -78,3 +90,12 @@ export interface BlockedFile {
   fileName?: string;
   pageUrl?: string;
 }
+
+/** "v1.2 (r3)" when the version has a name, else "r3". */
+export const versionLabel = (r: { revision: number; version?: string | null }) => (r.version ? `${r.version} (r${r.revision})` : `r${r.revision}`);
+
+export const formatBytes = (n: number) =>
+  n < 1024 ? `${n} B` : n < 1024 ** 2 ? `${(n / 1024).toFixed(0)} KB` : n < 1024 ** 3 ? `${(n / 1024 ** 2).toFixed(1)} MB` : `${(n / 1024 ** 3).toFixed(2)} GB`;
+
+/** The server turned us away for a missing or wrong pack key. */
+export const isPackKeyError = (message: string) => /pack key/i.test(message);

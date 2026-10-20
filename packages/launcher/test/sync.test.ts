@@ -92,6 +92,27 @@ describe("syncInstance", () => {
   });
 });
 
+describe("shared download cache", () => {
+  it("reuses a file another pack already downloaded, and sends per-URL headers", async () => {
+    const cacheDir = await tmp();
+    const e = entry("mods/shared.jar", "shared bytes");
+    const seen: { url: string; key?: string }[] = [];
+    const counting: Fetcher = async (url, init) => {
+      seen.push({ url, key: (init?.headers as Record<string, string>)["X-Pack-Key"] });
+      return fetcher(url, init);
+    };
+    const headersFor = (url: string): Record<string, string> => (url.startsWith("https://cdn.test/") ? { "X-Pack-Key": "k" } : {});
+    await syncInstance({ instanceDir: await tmp(), packId: "a", packName: "A", revision: 1, lockfile: lock([e]), fetcher: counting, cacheDir, headersFor });
+    expect(seen).toEqual([{ url: e.downloads[0], key: "k" }]);
+
+    const other = await tmp();
+    const r = await syncInstance({ instanceDir: other, packId: "b", packName: "B", revision: 1, lockfile: lock([e]), fetcher: counting, cacheDir });
+    expect(r.downloaded).toBe(1);
+    expect(seen).toHaveLength(1);
+    expect(await readFile(join(other, "mods/shared.jar"), "utf8")).toBe("shared bytes");
+  });
+});
+
 describe("captureChanges", () => {
   it("turns edits into ops: Modrinth refs for known jars, uploads for the rest, deletes", async () => {
     const dir = await tmp();

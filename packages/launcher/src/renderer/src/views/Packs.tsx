@@ -1,5 +1,45 @@
 import { useCallback, useEffect, useState } from "react";
-import { invoke, on, type BlockedFile, type PackDetail, type PackSummary, type Progress, type PublicSettings } from "../bridge";
+import {
+  formatBytes,
+  invoke,
+  isPackKeyError,
+  on,
+  versionLabel,
+  type BlockedFile,
+  type PackDetail,
+  type PackSummary,
+  type Progress,
+  type PublicSettings,
+} from "../bridge";
+
+/** Shown when the server wants the shared pack key and we don't have the right one. */
+function PackKeyPrompt({ onSaved }: { onSaved: () => void }) {
+  const [key, setKey] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await invoke("server:setKey", key);
+      onSaved();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="card connect" onSubmit={save}>
+      <h2>Enter the pack key</h2>
+      <p className="muted">The pack server needs a key to show and download packs. Ask Evan for it. Everyone uses the same one.</p>
+      <label>Pack key<input value={key} onChange={(e) => setKey(e.target.value)} type="password" required autoFocus /></label>
+      {error && <div className="error">{error}</div>}
+      <button className="primary" disabled={busy}>{busy ? "Checking…" : "Save"}</button>
+    </form>
+  );
+}
 
 export function Packs({ settings, goToAccounts }: { settings: PublicSettings; goToAccounts: () => void }) {
   const [packs, setPacks] = useState<PackSummary[] | null>(null);
@@ -18,6 +58,7 @@ export function Packs({ settings, goToAccounts }: { settings: PublicSettings; go
   }, []);
   useEffect(() => void load(), [load]);
 
+  if (error && isPackKeyError(error)) return <PackKeyPrompt onSaved={load} />;
   if (error)
     return (
       <div>
@@ -35,7 +76,7 @@ export function Packs({ settings, goToAccounts }: { settings: PublicSettings; go
           <li key={p.id} className={p.id === selected ? "selected" : ""} onClick={() => setSelected(p.id)}>
             <strong>{p.name}</strong>
             <small>
-              {p.latestRevision ? `r${p.latestRevision}` : "no revisions"}
+              {p.latestRevision ? versionLabel({ revision: p.latestRevision, version: p.latestVersion }) : "no versions"}
               {p.installedRevision && p.installedRevision !== p.latestRevision ? ` · update from r${p.installedRevision}` : ""}
               {p.installedRevision === p.latestRevision && p.latestRevision ? " · installed" : ""}
             </small>
@@ -55,6 +96,7 @@ function PackView({ id, settings, goToAccounts, onChanged }: { id: string; setti
   const [running, setRunning] = useState(false);
   const [blocked, setBlocked] = useState<BlockedFile[]>([]);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     void invoke<PackDetail>("packs:get", id).then(setPack, (e: Error) => setError(e.message));
@@ -68,17 +110,24 @@ function PackView({ id, settings, goToAccounts, onChanged }: { id: string; setti
 
   if (!pack) return <div className="muted">{error || "Loading…"}</div>;
   const latest = pack.revisions[0];
-  const shown = pack.revisions.find((r) => r.revision === (revision ?? latest?.revision));
+  const target = revision ?? latest?.revision;
+  const shown = pack.revisions.find((r) => r.revision === target);
+  // Updating one version at a time is the common case: say how small the update is.
+  const update =
+    pack.installedRevision && target && pack.installedRevision === target - 1 ? pack.revisions.find((r) => r.revision === target)?.changes : undefined;
 
   const play = async (offline = false) => {
     if (!offline && !settings.selectedAccountId) return goToAccounts();
     setBusy(true);
     setError("");
     setBlocked([]);
+    setNotice("");
     try {
-      const res = await invoke<{ status: string; blocked?: BlockedFile[] }>("packs:play", id, { revision, offline });
+      const res = await invoke<{ status: string; blocked?: BlockedFile[]; sync?: { downloaded: number; removed: number } }>("packs:play", id, { revision, offline });
       if (res.status === "blocked") setBlocked(res.blocked ?? []);
       else setRunning(true);
+      if (res.sync && (res.sync.downloaded || res.sync.removed))
+        setNotice(`Updated: ${res.sync.downloaded} file${res.sync.downloaded === 1 ? "" : "s"} fetched, ${res.sync.removed} removed. Everything else was already up to date.`);
       onChanged();
     } catch (e) {
       setError((e as Error).message);
@@ -104,6 +153,13 @@ function PackView({ id, settings, goToAccounts, onChanged }: { id: string; setti
         </div>
       </header>
 
+      {update && pack.installedRevision !== target && (
+        <div className="notice">
+          Update to {versionLabel(shown!)}: {update.added.length} new, {update.updated.length} changed, {update.removed.length} removed
+          {update.downloadBytes ? ` (about ${formatBytes(update.downloadBytes)} to download)` : ""}. The rest of the pack is kept.
+        </div>
+      )}
+      {notice && <div className="notice">{notice}</div>}
       {progress && <ProgressBar p={progress} />}
       {error && <div className="error">{error}</div>}
 
@@ -132,10 +188,10 @@ function PackView({ id, settings, goToAccounts, onChanged }: { id: string; setti
           <div><small>Files</small>{shown.fileCount}</div>
           <div><small>Manual downloads</small>{shown.blockedCount}</div>
           <div>
-            <small>Revision</small>
+            <small>Version</small>
             <select value={revision ?? latest?.revision} onChange={(e) => setRevision(Number(e.target.value))}>
               {pack.revisions.map((r) => (
-                <option key={r.revision} value={r.revision}>r{r.revision}{r.revision === latest?.revision ? " (latest)" : ""}</option>
+                <option key={r.revision} value={r.revision}>{versionLabel(r)}{r.revision === latest?.revision ? " · latest" : ""}</option>
               ))}
             </select>
           </div>
@@ -146,8 +202,13 @@ function PackView({ id, settings, goToAccounts, onChanged }: { id: string; setti
       <ul className="changelog">
         {pack.revisions.map((r) => (
           <li key={r.revision}>
-            <strong>r{r.revision}</strong> <small className="muted">{new Date(r.createdAt).toLocaleString()}{r.publishedBy ? ` · ${r.publishedBy}` : ""}</small>
+            <strong>{versionLabel(r)}</strong> <small className="muted">{new Date(r.createdAt).toLocaleString()}{r.publishedBy ? ` · ${r.publishedBy}` : ""}</small>
             <p>{r.changelog || <span className="muted">No notes</span>}</p>
+            {r.changes && (
+              <small className="muted">
+                {r.changes.added.length} added, {r.changes.updated.length} changed, {r.changes.removed.length} removed
+              </small>
+            )}
           </li>
         ))}
       </ul>

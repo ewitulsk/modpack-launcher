@@ -11,6 +11,12 @@ resource "random_password" "admin_password" {
   special = false
 }
 
+# Shared key every launcher needs to browse and download packs. Baked into friends' builds.
+resource "random_password" "pack_key" {
+  length  = 24
+  special = false
+}
+
 resource "digitalocean_ssh_key" "deploy" {
   name       = "${var.name}-deploy"
   public_key = file(pathexpand(var.ssh_public_key_path))
@@ -34,6 +40,7 @@ resource "digitalocean_droplet" "api" {
     admin_token        = random_password.admin_token.result
     admin_username     = var.admin_username
     admin_password     = random_password.admin_password.result
+    pack_key           = random_password.pack_key.result
     curseforge_api_key = var.curseforge_api_key
   })
 

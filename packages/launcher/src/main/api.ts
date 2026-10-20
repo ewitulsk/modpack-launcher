@@ -8,6 +8,7 @@ export interface PackSummary {
   ownerId: string;
   ownerName: string;
   latestRevision: number | null;
+  latestVersion: string | null;
 }
 
 export interface Me {
@@ -16,8 +17,17 @@ export interface Me {
   isAdmin: boolean;
 }
 
+export interface Changes {
+  added: string[];
+  updated: string[];
+  removed: string[];
+  downloadBytes: number;
+}
+
 export interface RevisionSummary {
   revision: number;
+  version?: string;
+  changes?: Changes;
   changelog: string;
   warnings: string[];
   minecraft: string;
@@ -47,6 +57,8 @@ export class Api {
   constructor(
     readonly baseUrl: string,
     private readonly token = "",
+    /** Shared key the server may require to browse and download packs. */
+    private readonly packKey = "",
     private readonly fetcher: Fetcher = fetch,
   ) {}
 
@@ -57,6 +69,7 @@ export class Api {
       method,
       headers: {
         ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+        ...(this.packKey ? { "X-Pack-Key": this.packKey } : {}),
         ...(body === undefined ? {} : { "Content-Type": isBytes ? "application/octet-stream" : "application/json" }),
         ...headers,
       },
@@ -102,8 +115,8 @@ export class Api {
   preview(remix: unknown) {
     return this.req<{ lockfile: Lockfile; warnings: string[] }>("POST", "/resolve/preview", { remix });
   }
-  publish(packId: string, remix: unknown, changelog: string) {
-    return this.req<RevisionSummary>("POST", `/packs/${encodeURIComponent(packId)}/revisions`, { remix, changelog });
+  publish(packId: string, remix: unknown, changelog: string, version?: string) {
+    return this.req<RevisionSummary>("POST", `/packs/${encodeURIComponent(packId)}/revisions`, { remix, changelog, version });
   }
   /** Uploads (if the server doesn't already have it) and returns the sha256. */
   async upload(data: Uint8Array): Promise<string> {

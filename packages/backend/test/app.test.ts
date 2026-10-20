@@ -86,6 +86,41 @@ describe("API", () => {
     expect(dup.statusCode).toBe(409);
   });
 
+  it("needs the pack key to browse and download, but not for accounts", async () => {
+    const locked = buildApp({ store, blobs, modrinth: new ModrinthClient(fetcher), fetcher, adminToken: ADMIN, packKey: "letmein" });
+    const jar = new TextEncoder().encode("jar");
+    const hex = sha256(jar);
+    await blobs.put(jar);
+    expect((await locked.inject({ url: "/health" })).json().packKey).toBe(true);
+    const denied = await locked.inject({ url: "/packs" });
+    expect(denied.statusCode).toBe(401);
+    expect(denied.json().code).toBe("pack-key");
+    expect((await locked.inject({ url: "/packs", headers: { "x-pack-key": "wrong" } })).statusCode).toBe(401);
+    expect((await locked.inject({ url: "/packs", headers: { "x-pack-key": "letmein" } })).statusCode).toBe(200);
+    expect((await locked.inject({ url: "/packs", headers: as(ADMIN) })).statusCode).toBe(200);
+    const blobApp = buildApp({ store, blobs, modrinth: new ModrinthClient(fetcher), fetcher, adminToken: ADMIN, packKey: "letmein", serveBlobs: true });
+    expect((await blobApp.inject({ url: `/blobs/${hex.slice(0, 2)}/${hex}` })).statusCode).toBe(401);
+    expect((await blobApp.inject({ url: `/blobs/${hex.slice(0, 2)}/${hex}?key=letmein` })).statusCode).toBe(200);
+  });
+
+  it("names versions and records what changed since the previous one", async () => {
+    const pack = (await app.inject({ method: "POST", url: "/packs", headers: as(ADMIN), payload: { name: "V" } })).json();
+    const base = { schema: 1, name: "R", base: { source: "modrinth", versionId: "BASE" } };
+    const v1 = await app.inject({ method: "POST", url: `/packs/${pack.slug}/revisions`, headers: as(ADMIN), payload: { remix: { ...base, ops: [] }, version: "1.0" } });
+    expect(v1.json()).toMatchObject({ revision: 1, version: "1.0" });
+    expect(v1.json().changes).toBeUndefined();
+    const jar = new TextEncoder().encode("extra");
+    const hex = sha256(jar);
+    await blobs.put(jar);
+    const v2 = await app.inject({
+      method: "POST",
+      url: `/packs/${pack.slug}/revisions`,
+      headers: as(ADMIN),
+      payload: { remix: { ...base, ops: [{ op: "putFile", path: "mods/extra.jar", blob: `sha256:${hex}` }, { op: "deletePath", glob: "config/**" }] } },
+    });
+    expect(v2.json().changes).toEqual({ added: ["mods/extra.jar"], updated: [], removed: ["config/a.toml"], downloadBytes: 5 });
+  });
+
   it("only lets the owner (or the admin) publish to a pack", async () => {
     const sam = await signUp("sam");
     const kim = await signUp("kim");

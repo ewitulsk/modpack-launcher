@@ -6,6 +6,8 @@ export function SettingsView({ settings, me, onChange }: { settings: PublicSetti
   const [msaClientId, setClientId] = useState(settings.msaClientId);
   const [ignore, setIgnore] = useState(settings.captureIgnore.join("\n"));
   const [saved, setSaved] = useState(false);
+  const [packKey, setPackKey] = useState("");
+  const [keyStatus, setKeyStatus] = useState("");
 
   const save = async () => {
     onChange(
@@ -38,6 +40,31 @@ export function SettingsView({ settings, me, onChange }: { settings: PublicSetti
       <div className="row">
         <button className="primary" onClick={save}>Save</button>
         {saved && <span className="muted">Saved</span>}
+      </div>
+      <label>
+        Pack key {settings.hasPackKey ? <small className="muted">(set)</small> : null}
+        <div className="row">
+          <input className="grow" value={packKey} onChange={(e) => setPackKey(e.target.value)} type="password" placeholder="Only needed if Evan changes it" />
+          <button
+            disabled={!packKey}
+            onClick={async () => {
+              try {
+                onChange(await invoke<PublicSettings>("server:setKey", packKey));
+                setPackKey("");
+                setKeyStatus("Saved");
+              } catch (e) {
+                setKeyStatus((e as Error).message);
+              }
+            }}
+          >
+            Save key
+          </button>
+        </div>
+        {keyStatus && <small className="muted">{keyStatus}</small>}
+      </label>
+      <div className="row">
+        <span className="muted grow">Downloaded files are cached and shared between packs, so the same mod is never downloaded twice.</span>
+        <button className="ghost" onClick={async () => (await invoke("cache:clear"), setKeyStatus("Download cache cleared"))}>Clear download cache</button>
       </div>
       <div className="row">
         <span className="muted grow">

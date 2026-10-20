@@ -56,11 +56,13 @@ function verify(data: Uint8Array, e: LockEntry) {
   return true;
 }
 
-async function fetchEntry(fetcher: Fetcher, e: LockEntry): Promise<Uint8Array> {
+type HeadersFor = (url: string) => Record<string, string>;
+
+async function fetchEntry(fetcher: Fetcher, e: LockEntry, headersFor: HeadersFor = () => ({})): Promise<Uint8Array> {
   const errors: string[] = [];
   for (const url of e.downloads) {
     try {
-      const res = await fetcher(url, { headers: { "User-Agent": USER_AGENT } });
+      const res = await fetcher(url, { headers: { "User-Agent": USER_AGENT, ...headersFor(url) } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = new Uint8Array(await res.arrayBuffer());
       if (!verify(data, e)) throw new Error("hash mismatch");
@@ -70,6 +72,33 @@ async function fetchEntry(fetcher: Fetcher, e: LockEntry): Promise<Uint8Array> {
     }
   }
   throw new Error(`Couldn't download ${e.path}: ${errors.join("; ") || "no download URLs"}`);
+}
+
+/** Where a file lives in the shared download cache, keyed by its strongest hash. */
+function cachePath(cacheDir: string, e: LockEntry): string | null {
+  for (const algo of ["sha512", "sha256", "sha1"] as const) {
+    const hex = e.hashes[algo]?.toLowerCase();
+    if (hex) return join(cacheDir, algo, hex.slice(0, 2), hex);
+  }
+  return null;
+}
+
+/**
+ * Shared across every pack and version: a mod that's already been downloaded once (for any
+ * pack) is copied from the cache instead of downloaded again.
+ */
+async function getEntry(fetcher: Fetcher, e: LockEntry, headersFor?: HeadersFor, cacheDir?: string): Promise<Uint8Array> {
+  const cached = cacheDir ? cachePath(cacheDir, e) : null;
+  if (cached) {
+    const data = await readFile(cached).then((b) => new Uint8Array(b), () => null);
+    if (data && verify(data, e)) return data;
+  }
+  const data = await fetchEntry(fetcher, e, headersFor);
+  if (cached) {
+    await ensureDir(dirname(cached));
+    await writeFile(`${cached}.tmp`, data).then(() => rename(`${cached}.tmp`, cached)).catch(() => undefined);
+  }
+  return data;
 }
 
 async function writeEntry(instanceDir: string, e: LockEntry, data: Uint8Array) {
@@ -97,6 +126,10 @@ export async function syncInstance(opts: {
   revision: number;
   lockfile: Lockfile;
   fetcher?: Fetcher;
+  /** Extra request headers per download URL (the pack key for our own server). */
+  headersFor?: HeadersFor;
+  /** Shared download cache folder. Omit to always download. */
+  cacheDir?: string;
   concurrency?: number;
   onProgress?: (p: SyncProgress) => void;
 }): Promise<SyncResult> {
@@ -119,7 +152,7 @@ export async function syncInstance(opts: {
   let done = 0;
   report({ phase: "download", done, total: plan.download.length });
   await pool(plan.download, opts.concurrency ?? 8, async (e) => {
-    await writeEntry(instanceDir, e, await fetchEntry(fetcher, e));
+    await writeEntry(instanceDir, e, await getEntry(fetcher, e, opts.headersFor, opts.cacheDir));
     report({ phase: "download", done: ++done, total: plan.download.length, current: e.path });
   });
 

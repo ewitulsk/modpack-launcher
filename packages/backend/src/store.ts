@@ -28,11 +28,24 @@ export interface Pack {
   ownerName: string;
   createdAt: string;
   latestRevision: number | null;
+  latestVersion: string | null;
+}
+
+/** Difference from the previous version: what an update downloads or deletes. */
+export interface Changes {
+  added: string[];
+  updated: string[];
+  removed: string[];
+  downloadBytes: number;
 }
 
 export interface RevisionSummary {
   packId: string;
   revision: number;
+  /** Optional name like "1.2"; the launcher falls back to r<revision>. */
+  version?: string;
+  /** Missing on a pack's first version. */
+  changes?: Changes;
   changelog: string;
   warnings: string[];
   minecraft: string;
@@ -55,6 +68,8 @@ export interface NewRevision {
   server: Lockfile;
   changelog: string;
   warnings: string[];
+  version?: string;
+  changes?: Changes;
   publishedBy: string;
 }
 
@@ -136,11 +151,13 @@ const toPack = (r: Row): Pack => ({
   ownerName: r.owner_name as string,
   createdAt: r.created_at as string,
   latestRevision: (r.latest_revision as number | null) ?? null,
+  latestVersion: (r.latest_version as string | null) ?? null,
 });
 
 const PACK_SELECT = `
   select p.*, u.username as owner_name,
-    (select max(revision) from revisions r where r.pack_id = p.id) as latest_revision
+    (select max(revision) from revisions r where r.pack_id = p.id) as latest_revision,
+    (select json_extract(summary, '$.version') from revisions r where r.pack_id = p.id order by revision desc limit 1) as latest_version
   from packs p join users u on u.id = p.owner_id`;
 
 /**
@@ -266,6 +283,8 @@ export class Store {
       const summary: RevisionSummary = {
         packId,
         revision: next,
+        version: r.version,
+        changes: r.changes,
         changelog: r.changelog,
         warnings: r.warnings,
         minecraft: r.client.minecraft,

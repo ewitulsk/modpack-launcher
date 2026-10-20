@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { ModrinthClient, type RemixInput } from "@remix/core";
 import { Api } from "./api.js";
@@ -31,6 +31,10 @@ const dirs = {
   get java() {
     return join(this.data, "java");
   },
+  /** Every downloaded pack file by hash, shared by all packs and versions. */
+  get cache() {
+    return join(this.data, "cache");
+  },
   instance(slug: string) {
     return join(this.data, "instances", slug);
   },
@@ -48,7 +52,12 @@ const dev = !app.isPackaged;
 const preset = {
   serverUrl: (process.env.REMIX_SERVER_URL || import.meta.env.MAIN_VITE_SERVER_URL || (dev ? "http://localhost:3000" : "")).trim().replace(/\/$/, ""),
   token: (process.env.REMIX_TOKEN || (dev ? "dev" : "")).trim(),
+  /** From MAIN_VITE_PACK_KEY in .env.production, so friends never have to type it. */
+  packKey: (process.env.REMIX_PACK_KEY || import.meta.env.MAIN_VITE_PACK_KEY || "").trim(),
 };
+
+/** The pack key for the current server: one the player typed in, else the built-in one. */
+const packKeyFor = (s: Settings) => s.packKeys[s.serverUrl] || preset.packKey;
 
 const cleanUrl = (u: string) => u.trim().replace(/\/$/, "");
 
@@ -89,7 +98,7 @@ const log = (line: string) => send("log", line);
 async function api() {
   const s = await settings.get();
   if (!s.serverUrl) throw new Error("Set the pack server address first (Settings).");
-  return new Api(s.serverUrl, s.token);
+  return new Api(s.serverUrl, s.token, packKeyFor(s));
 }
 
 /** For publishing: needs a signed-in pack account. */
@@ -106,6 +115,7 @@ function publicSettings(s: Settings) {
     serverLocked: Boolean(preset.serverUrl),
     hasServer: Boolean(s.serverUrl),
     signedIn: Boolean(s.token),
+    hasPackKey: Boolean(packKeyFor(s)),
     displayName: s.displayName,
     accounts: s.accounts.map((a) => ({ id: a.id, name: a.name, source: a.source })),
     selectedAccountId: s.selectedAccountId,
@@ -149,11 +159,25 @@ const handlers: Record<string, Handler> = {
   "settings:update": async (patch: Partial<Pick<Settings, "memoryMb" | "msaClientId" | "captureIgnore">>) =>
     publicSettings(await settings.update(patch)),
 
-  "server:set": async (serverUrl: string) => {
+  "server:set": async (serverUrl: string, packKey = "") => {
     if (preset.serverUrl) throw new Error("This launcher's server address is fixed.");
     const url = cleanUrl(serverUrl);
-    await new Api(url).packs();
+    const key = packKey.trim() || preset.packKey;
+    await new Api(url, "", key).packs();
+    const s = await settings.get();
+    if (packKey.trim()) await settings.update({ packKeys: { ...s.packKeys, [url]: packKey.trim() } });
     return publicSettings(await useServer(url));
+  },
+  /** Save the shared pack key for this server, after checking the server accepts it. */
+  "server:setKey": async (packKey: string) => {
+    const s = await settings.get();
+    const key = packKey.trim();
+    await new Api(s.serverUrl, "", key).packs();
+    return publicSettings(await settings.update({ packKeys: { ...s.packKeys, [s.serverUrl]: key } }));
+  },
+  "cache:clear": async () => {
+    await rm(dirs.cache, { recursive: true, force: true });
+    return true;
   },
   "server:forget": async () => {
     if (preset.serverUrl) throw new Error("This launcher's server address is fixed.");
@@ -217,6 +241,7 @@ const handlers: Record<string, Handler> = {
   /** Sync, install and launch. Returns early with the blocked list if manual downloads are needed. */
   "packs:play": async (id: string, opts: { revision?: number; offline?: boolean } = {}) => {
     const client = await api();
+    const packKey = packKeyFor(await settings.get());
     const pack = await client.pack(id);
     const rev = await client.revision(pack.id, opts.revision ?? "latest");
     const instanceDir = dirs.instance(pack.slug);
@@ -229,6 +254,8 @@ const handlers: Record<string, Handler> = {
       packName: pack.name,
       revision: rev.revision,
       lockfile: lock,
+      cacheDir: dirs.cache,
+      headersFor: (url): Record<string, string> => (packKey && url.startsWith(`${client.baseUrl}/`) ? { "X-Pack-Key": packKey } : {}),
       onProgress: (p) => send("progress", { packId: pack.id, kind: "sync", ...p }),
     });
     const stillBlocked = await fillBlocked(instanceDir, res.blocked);
@@ -273,7 +300,8 @@ const handlers: Record<string, Handler> = {
   "admin:createInvite": async (note: string) => (await authed()).createInvite(note),
   "admin:createPack": async (name: string, description: string) => (await authed()).createPack(name, description),
   "admin:preview": async (remix: RemixInput) => (await authed()).preview(remix),
-  "admin:publish": async (packId: string, remix: RemixInput, changelog: string) => (await authed()).publish(packId, remix, changelog),
+  "admin:publish": async (packId: string, remix: RemixInput, changelog: string, version?: string) =>
+    (await authed()).publish(packId, remix, changelog, version),
   "admin:latestRemix": async (packId: string) => {
     const pack = await (await api()).pack(packId);
     if (!pack.latestRevision) return null;

@@ -34,7 +34,11 @@ npm run dev:launcher
 
 ## Accounts
 
-Anyone with the launcher can browse and play every pack, no account needed. To remix and publish you need a pack account, and making one needs an invite code from the admin (Remix & publish → New invite code). You can publish to packs you created; the admin can publish to any.
+Browsing and playing packs needs the shared pack key (one key for everyone, baked into the installer you build, so friends never type it), but no account. To remix and publish you need a pack account, and making one needs an invite code from the admin (Remix & publish → New invite code). You can publish to packs you created; the admin can publish to any.
+
+## Versions and updates
+
+Every publish is a new, immutable version (optionally named, like "1.2"). Launchers keep track of the version they installed and, on update, download only files that are new or changed and delete only files the pack removed; worlds and the player's own files are left alone. Downloaded files also go into a shared cache, so a mod already downloaded for one pack is never downloaded again for another.
 
 ## Deploy
 
@@ -43,7 +47,7 @@ cd infra/terraform && terraform init && terraform apply   # once; needs DIGITALO
 cd ../.. && npm run deploy                                # every backend change
 ```
 
-`npm run deploy` builds the backend into one file (`packages/backend/dist/server.mjs`), copies it to the droplet over SSH and restarts it. See [infra/terraform/README.md](infra/terraform/README.md).
+`npm run deploy` builds the backend into one file (`packages/backend/dist/server.mjs`), copies it to the droplet over SSH, sets the pack key there, restarts it, and writes the server address and pack key into `packages/launcher/.env.production` for the next installer build. See [infra/terraform/README.md](infra/terraform/README.md).
 
 ## Try resolving a pack
 
