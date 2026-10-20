@@ -21,6 +21,7 @@ import { installGame } from "./game/install.js";
 import { launchGame } from "./game/launch.js";
 import { fillBlocked, readState, syncInstance } from "./game/sync.js";
 import { SettingsStore, type Settings } from "./settings.js";
+import icon from "../../build/icon.png?asset";
 
 const dirs = {
   get data() {
@@ -385,6 +386,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     title: "Remix Launcher",
+    icon,
     backgroundColor: "#16181d",
     webPreferences: { preload: join(__dirname, "../preload/index.mjs"), sandbox: false },
   });

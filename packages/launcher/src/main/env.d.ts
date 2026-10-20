@@ -1,3 +1,5 @@
+/// <reference types="electron-vite/node" />
+
 interface ImportMetaEnv {
   /** From packages/launcher/.env.production at build time; see README. */
   readonly MAIN_VITE_SERVER_URL?: string;
