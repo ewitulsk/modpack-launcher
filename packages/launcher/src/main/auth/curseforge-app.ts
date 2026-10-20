@@ -41,7 +41,7 @@ export async function importCurseforgeAccounts(paths = curseforgeAccountFileCand
       const token = a.accessToken ?? "";
       const expiresAt = Date.parse(a.accessTokenExpiresAt ?? "") || 0;
       if (!token.startsWith("ey")) {
-        notes.push(`No readable token for ${name}; open CurseForge and launch Minecraft once, then try again.`);
+        notes.push(`CurseForge keeps ${name}'s sign-in encrypted, so it can't be imported. Use "Sign in with Microsoft" instead; you only do it once.`);
         continue;
       }
       if (expiresAt - now < 10 * 60_000) {
