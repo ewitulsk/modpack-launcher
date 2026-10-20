@@ -46,7 +46,7 @@ const settings = new SettingsStore(app.getPath("userData"));
 // Not import.meta.env.DEV: electron-vite builds main in production mode even under `npm run dev`.
 const dev = !app.isPackaged;
 const preset = {
-  serverUrl: (process.env.REMIX_SERVER_URL || import.meta.env?.MAIN_VITE_SERVER_URL || (dev ? "http://localhost:3000" : "")).trim().replace(/\/$/, ""),
+  serverUrl: (process.env.REMIX_SERVER_URL || import.meta.env.MAIN_VITE_SERVER_URL || (dev ? "http://localhost:3000" : "")).trim().replace(/\/$/, ""),
   token: (process.env.REMIX_TOKEN || (dev ? "dev" : "")).trim(),
 };
 

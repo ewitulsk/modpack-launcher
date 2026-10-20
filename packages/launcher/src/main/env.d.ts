@@ -3,6 +3,6 @@ interface ImportMetaEnv {
 }
 
 interface ImportMeta {
-  /** Injected by electron-vite; undefined when the file runs outside it (tests, tsx). */
-  readonly env?: ImportMetaEnv;
+  /** Injected by electron-vite. Accessed without `?.` so electron-vite can substitute it at build time. */
+  readonly env: ImportMetaEnv;
 }
