@@ -1,6 +1,7 @@
 {
   "name": "@remix/launcher",
   "version": "0.1.0",
+  "author": "Evan Witulski",
   "private": true,
   "description": "Friends-only modpack launcher: sign in, sync remixed packs, play.",
   "type": "module",
@@ -27,7 +28,7 @@
     "@types/react-dom": "^19.3.0",
     "@types/sql.js": "^1.4.9",
     "@vitejs/plugin-react": "^6.1.2",
-    "electron": "^44.9.0",
+    "electron": "44.9.0",
     "electron-builder": "^26.15.3",
     "electron-vite": "^6.0.0",
     "react": "^19.3.1",
