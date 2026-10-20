@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Builds the backend into one file and ships it to the droplet:  npm run deploy
 // Host and pack key come from `terraform output` in infra/terraform (or DEPLOY_HOST / PACK_KEY).
-// Also keeps packages/launcher/.env.production pointing at the server with the right pack key.
+// Also keeps packages/launcher/.env.production pointing at the server. The pack key is never written
+// there: Evan hands it out himself and the launcher asks for it.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -46,7 +47,7 @@ console.log(`Uploading to ${host}…`);
 run("scp", [...ssh, "packages/backend/dist/server.mjs", `${target}:/opt/remix/server.mjs.new`]);
 run("ssh", [...ssh, target, "mv /opt/remix/server.mjs.new /opt/remix/server.mjs && systemctl restart remix"]);
 
-// Friends' builds (npm run dist -w @remix/launcher) read these.
+// Friends' builds (npm run dist -w @remix/launcher) read this. Never the pack key.
 const envFile = join(root, "packages/launcher/.env.production");
 const env = new Map(
   (existsSync(envFile) ? readFileSync(envFile, "utf8") : "")
@@ -55,7 +56,7 @@ const env = new Map(
     .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]),
 );
 env.set("MAIN_VITE_SERVER_URL", `http://${host}`);
-if (packKey) env.set("MAIN_VITE_PACK_KEY", packKey);
+env.delete("MAIN_VITE_PACK_KEY");
 writeFileSync(envFile, [...env].map(([k, v]) => `${k}=${v}`).join("\n") + "\n");
 console.log("Updated packages/launcher/.env.production (rebuild the installer to ship it).");
 

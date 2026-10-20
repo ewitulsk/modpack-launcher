@@ -25,7 +25,7 @@ output "admin_token" {
 }
 
 output "pack_key" {
-  description = "Shared key launchers need to see and download packs. npm run deploy puts it on the server and in packages/launcher/.env.production."
+  description = "Shared key every pack download needs. npm run deploy puts it on the server; hand it to friends yourself (it is never built into the launcher)."
   value       = random_password.pack_key.result
   sensitive   = true
 }

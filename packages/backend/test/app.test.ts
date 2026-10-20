@@ -86,21 +86,28 @@ describe("API", () => {
     expect(dup.statusCode).toBe(409);
   });
 
-  it("needs the pack key to browse and download, but not for accounts", async () => {
-    const locked = buildApp({ store, blobs, modrinth: new ModrinthClient(fetcher), fetcher, adminToken: ADMIN, packKey: "letmein" });
+  it("lets anyone browse but needs the pack key on every download, even for accounts", async () => {
+    const pack = (await app.inject({ method: "POST", url: "/packs", headers: as(ADMIN), payload: { name: "Keyed" } })).json();
+    const remix = { schema: 1, name: "K", base: { source: "modrinth", versionId: "BASE" }, ops: [] };
+    expect((await app.inject({ method: "POST", url: `/packs/${pack.slug}/revisions`, headers: as(ADMIN), payload: { remix } })).statusCode).toBe(201);
+    const locked = buildApp({ store, blobs, modrinth: new ModrinthClient(fetcher), fetcher, adminToken: ADMIN, packKey: "letmein", serveBlobs: true });
     const jar = new TextEncoder().encode("jar");
     const hex = sha256(jar);
     await blobs.put(jar);
     expect((await locked.inject({ url: "/health" })).json().packKey).toBe(true);
-    const denied = await locked.inject({ url: "/packs" });
-    expect(denied.statusCode).toBe(401);
-    expect(denied.json().code).toBe("pack-key");
-    expect((await locked.inject({ url: "/packs", headers: { "x-pack-key": "wrong" } })).statusCode).toBe(401);
-    expect((await locked.inject({ url: "/packs", headers: { "x-pack-key": "letmein" } })).statusCode).toBe(200);
-    expect((await locked.inject({ url: "/packs", headers: as(ADMIN) })).statusCode).toBe(200);
-    const blobApp = buildApp({ store, blobs, modrinth: new ModrinthClient(fetcher), fetcher, adminToken: ADMIN, packKey: "letmein", serveBlobs: true });
-    expect((await blobApp.inject({ url: `/blobs/${hex.slice(0, 2)}/${hex}` })).statusCode).toBe(401);
-    expect((await blobApp.inject({ url: `/blobs/${hex.slice(0, 2)}/${hex}?key=letmein` })).statusCode).toBe(200);
+    expect((await locked.inject({ url: "/packs" })).statusCode).toBe(200);
+    expect((await locked.inject({ url: `/packs/${pack.slug}` })).statusCode).toBe(200);
+
+    const downloads = [`/packs/${pack.slug}/revisions/latest`, `/packs/${pack.slug}/revisions/latest/lockfile`, `/blobs/${hex.slice(0, 2)}/${hex}`];
+    for (const url of downloads) {
+      const denied = await locked.inject({ url });
+      expect(denied.statusCode).toBe(401);
+      expect(denied.json().code).toBe("pack-key");
+      expect((await locked.inject({ url, headers: as(ADMIN) })).statusCode).toBe(401);
+      expect((await locked.inject({ url, headers: { "x-pack-key": "wrong" } })).statusCode).toBe(401);
+      expect((await locked.inject({ url, headers: { "x-pack-key": "letmein" } })).statusCode).toBe(200);
+    }
+    expect((await locked.inject({ url: `/blobs/${hex.slice(0, 2)}/${hex}?key=letmein` })).statusCode).toBe(200);
   });
 
   it("names versions and records what changed since the previous one", async () => {

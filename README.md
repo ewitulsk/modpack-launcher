@@ -34,7 +34,7 @@ npm run dev:launcher
 
 ## Accounts
 
-Browsing and playing packs needs the shared pack key (one key for everyone, baked into the installer you build, so friends never type it), but no account. To remix and publish you need a pack account, and making one needs an invite code from the admin (Remix & publish → New invite code). You can publish to packs you created; the admin can publish to any.
+Anyone can browse packs. Downloading one needs the shared pack key: one key for everyone, which Evan hands out himself. It's never built into the installer; the launcher asks for it the first time you download a pack and remembers it. Playing needs no pack account. To remix and publish you need a pack account, and making one needs an invite code from the admin (Remix & publish → New invite code). You can publish to packs you created; the admin can publish to any.
 
 ## Versions and updates
 
@@ -47,7 +47,11 @@ cd infra/terraform && terraform init && terraform apply   # once; needs DIGITALO
 cd ../.. && npm run deploy                                # every backend change
 ```
 
-`npm run deploy` builds the backend into one file (`packages/backend/dist/server.mjs`), copies it to the droplet over SSH, sets the pack key there, restarts it, and writes the server address and pack key into `packages/launcher/.env.production` for the next installer build. See [infra/terraform/README.md](infra/terraform/README.md).
+`npm run deploy` builds the backend into one file (`packages/backend/dist/server.mjs`), copies it to the droplet over SSH, sets the pack key there, restarts it, and writes the server address (never the key) into `packages/launcher/.env.production` for the next installer build. Get the key to hand out with `terraform -chdir=infra/terraform output -raw pack_key`. See [infra/terraform/README.md](infra/terraform/README.md).
+
+## Releases
+
+Pushing a tag `vX.Y.Z` (or Actions → Release launcher → Run workflow, or `gh workflow run release.yml -f version=X.Y.Z`) builds the Windows installer on GitHub and attaches it to a release. The server address comes from the `SERVER_URL` repo variable (default: the live droplet). The pack key is never built in: hand it to friends yourself, and the launcher asks for it the first time they download a pack.
 
 ## Try resolving a pack
 

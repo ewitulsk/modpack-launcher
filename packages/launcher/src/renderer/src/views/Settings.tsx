@@ -44,7 +44,7 @@ export function SettingsView({ settings, me, onChange }: { settings: PublicSetti
       <label>
         Pack key {settings.hasPackKey ? <small className="muted">(set)</small> : null}
         <div className="row">
-          <input className="grow" value={packKey} onChange={(e) => setPackKey(e.target.value)} type="password" placeholder="Only needed if Evan changes it" />
+          <input className="grow" value={packKey} onChange={(e) => setPackKey(e.target.value)} type="password" placeholder="Ask Evan for it" />
           <button
             disabled={!packKey}
             onClick={async () => {

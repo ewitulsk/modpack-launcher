@@ -54,12 +54,10 @@ const dev = !app.isPackaged;
 const preset = {
   serverUrl: (process.env.REMIX_SERVER_URL || import.meta.env.MAIN_VITE_SERVER_URL || (dev ? "http://localhost:3000" : "")).trim().replace(/\/$/, ""),
   token: (process.env.REMIX_TOKEN || (dev ? "dev" : "")).trim(),
-  /** From MAIN_VITE_PACK_KEY in .env.production, so friends never have to type it. */
-  packKey: (process.env.REMIX_PACK_KEY || import.meta.env.MAIN_VITE_PACK_KEY || "").trim(),
 };
 
-/** The pack key for the current server: one the player typed in, else the built-in one. */
-const packKeyFor = (s: Settings) => s.packKeys[s.serverUrl] || preset.packKey;
+/** The pack key for the current server. Never built in: Evan hands it out and the player types it. */
+const packKeyFor = (s: Settings) => s.packKeys[s.serverUrl] ?? "";
 
 const cleanUrl = (u: string) => u.trim().replace(/\/$/, "");
 
@@ -164,17 +162,17 @@ const handlers: Record<string, Handler> = {
   "server:set": async (serverUrl: string, packKey = "") => {
     if (preset.serverUrl) throw new Error("This launcher's server address is fixed.");
     const url = cleanUrl(serverUrl);
-    const key = packKey.trim() || preset.packKey;
-    await new Api(url, "", key).packs();
+    const key = packKey.trim();
+    await (key ? new Api(url, "", key).checkPackKey() : new Api(url).packs());
     const s = await settings.get();
     if (packKey.trim()) await settings.update({ packKeys: { ...s.packKeys, [url]: packKey.trim() } });
     return publicSettings(await useServer(url));
   },
-  /** Save the shared pack key for this server, after checking the server accepts it. */
+  /** Save the shared pack key for this server, after checking the server accepts it for downloads. */
   "server:setKey": async (packKey: string) => {
     const s = await settings.get();
     const key = packKey.trim();
-    await new Api(s.serverUrl, "", key).packs();
+    await new Api(s.serverUrl, "", key).checkPackKey();
     return publicSettings(await settings.update({ packKeys: { ...s.packKeys, [s.serverUrl]: key } }));
   },
   "cache:clear": async () => {

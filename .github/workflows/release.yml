@@ -1,0 +1,53 @@
+# Builds the Windows installer and publishes it as a GitHub release.
+# Release: push a tag like v0.2.0 (git tag v0.2.0 && git push origin v0.2.0), or run it by hand
+# from the Actions tab (or: gh workflow run release.yml -f version=0.2.0).
+# The pack key is never built in; friends get it from Evan and the launcher asks for it.
+name: Release launcher
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.2.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ inputs.version || github.ref_name }}
+      # Baked into the build. The server address isn't secret; set the SERVER_URL repo variable to change it.
+      MAIN_VITE_SERVER_URL: ${{ vars.SERVER_URL || 'http://104.248.105.50' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Set version
+        shell: bash
+        run: npm pkg set version="${VERSION#v}" -w @remix/launcher
+
+      - run: npm run build -w @remix/core
+
+      - run: npm test -w @remix/core -w @remix/launcher
+
+      - name: Build installer
+        run: npm run dist -w @remix/launcher -- --publish never
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(env.VERSION, 'v') && env.VERSION || format('v{0}', env.VERSION) }}
+          name: Remix Launcher ${{ env.VERSION }}
+          generate_release_notes: true
+          files: packages/launcher/release/*.exe

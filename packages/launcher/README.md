@@ -20,7 +20,7 @@ npm run dev -w @remix/launcher
 | `MAIN_VITE_SERVER_URL=https://...` in `packages/launcher/.env.production` | Baked into `npm run dist` builds, so friends open the launcher and see the packs straight away. Never put the admin token there. |
 | Typed on the connect screen | When neither is set |
 
-The pack key works the same way: `REMIX_PACK_KEY` at runtime, `MAIN_VITE_PACK_KEY` in `.env.production` at build (`npm run deploy` writes it), or typed in when the server asks for it.
+The pack key is never built in. Browsing packs needs no key; the first time a player downloads a pack the launcher asks for the key (Evan hands it out) and remembers it per server. It can also be changed in Settings.
 
 Logins are remembered per server, so switching between local and real servers keeps both.
 

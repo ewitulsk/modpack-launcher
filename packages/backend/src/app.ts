@@ -22,7 +22,7 @@ export interface AppDeps {
   adminToken: string;
   /** Username of the admin account the admin token maps to. */
   adminUsername?: string;
-  /** Shared key everyone needs to browse and download packs. Unset means downloads are open. */
+  /** Shared key every download request must carry. Unset means downloads are open. Browsing is always open. */
   packKey?: string;
   /** Serve GET /blobs/* from `blobs` (local disk mode). */
   serveBlobs?: boolean;
@@ -58,8 +58,9 @@ declare module "fastify" {
 }
 
 /**
- * Browsing and downloading packs needs the shared pack key (or an account).
- * Publishing needs an account, and an account needs an invite code.
+ * Anyone can browse packs. Every download (revision, lockfile, blob) needs the shared pack key,
+ * which Evan hands out himself; accounts don't bypass it. Publishing needs an account, and an
+ * account needs an invite code.
  */
 /** What a player's launcher will fetch or delete when updating from `prev` to `next`. */
 export function diffLockfiles(prev: Lockfile, next: Lockfile): Changes {
@@ -102,9 +103,9 @@ export function buildApp(deps: AppDeps) {
     if (!req.user) return reply.code(401).send({ error: "Sign in to your account first." });
     if (!req.user.isAdmin) return reply.code(403).send({ error: "Only the admin can do that." });
   };
-  /** The shared pack key, sent as X-Pack-Key (or ?key=). Signed-in accounts don't need it. */
+  /** The shared pack key, sent as X-Pack-Key (or ?key=) with every download request. */
   const downloader = async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!deps.packKey || req.user) return;
+    if (!deps.packKey) return;
     const key = req.headers["x-pack-key"] ?? (req.query as { key?: string } | undefined)?.key;
     if (key !== deps.packKey)
       return reply.code(401).send({ error: "This server needs the pack key. Ask Evan for it.", code: "pack-key" });
@@ -161,11 +162,11 @@ export function buildApp(deps: AppDeps) {
 
   app.get("/me", { preHandler: account }, async (req) => req.user);
 
-  // --- pack key: browse and download -----------------------------------------
+  // --- browse (open) and download (pack key) --------------------------------
 
-  app.get("/packs", { preHandler: downloader }, async () => deps.store.listPacks());
+  app.get("/packs", async () => deps.store.listPacks());
 
-  app.get<{ Params: { pack: string } }>("/packs/:pack", { preHandler: downloader }, async (req, reply) => {
+  app.get<{ Params: { pack: string } }>("/packs/:pack", async (req, reply) => {
     const pack = findPack(req.params.pack, reply);
     if (!pack) return;
     return { ...pack, revisions: deps.store.listRevisions(pack.id) };

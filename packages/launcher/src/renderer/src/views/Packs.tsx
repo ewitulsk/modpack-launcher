@@ -12,7 +12,7 @@ import {
   type PublicSettings,
 } from "../bridge";
 
-/** Shown when the server wants the shared pack key and we don't have the right one. */
+/** Shown when a download needs the shared pack key and we don't have the right one. */
 function PackKeyPrompt({ onSaved }: { onSaved: () => void }) {
   const [key, setKey] = useState("");
   const [error, setError] = useState("");
@@ -32,11 +32,11 @@ function PackKeyPrompt({ onSaved }: { onSaved: () => void }) {
   };
   return (
     <form className="card connect" onSubmit={save}>
-      <h2>Enter the pack key</h2>
-      <p className="muted">The pack server needs a key to show and download packs. Ask Evan for it. Everyone uses the same one.</p>
+      <h3>Enter the pack key</h3>
+      <p className="muted">Downloading packs needs a key. Ask Evan for it; everyone uses the same one. You only enter it once.</p>
       <label>Pack key<input value={key} onChange={(e) => setKey(e.target.value)} type="password" required autoFocus /></label>
       {error && <div className="error">{error}</div>}
-      <button className="primary" disabled={busy}>{busy ? "Checking…" : "Save"}</button>
+      <button className="primary" disabled={busy}>{busy ? "Checking…" : "Save and continue"}</button>
     </form>
   );
 }
@@ -58,7 +58,6 @@ export function Packs({ settings, goToAccounts }: { settings: PublicSettings; go
   }, []);
   useEffect(() => void load(), [load]);
 
-  if (error && isPackKeyError(error)) return <PackKeyPrompt onSaved={load} />;
   if (error)
     return (
       <div>
@@ -97,6 +96,8 @@ function PackView({ id, settings, goToAccounts, onChanged }: { id: string; setti
   const [blocked, setBlocked] = useState<BlockedFile[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  /** Set when a download was refused for want of the pack key: which play to retry once it's saved. */
+  const [needKey, setNeedKey] = useState<{ offline: boolean } | null>(null);
 
   useEffect(() => {
     void invoke<PackDetail>("packs:get", id).then(setPack, (e: Error) => setError(e.message));
@@ -122,6 +123,7 @@ function PackView({ id, settings, goToAccounts, onChanged }: { id: string; setti
     setError("");
     setBlocked([]);
     setNotice("");
+    setNeedKey(null);
     try {
       const res = await invoke<{ status: string; blocked?: BlockedFile[]; sync?: { downloaded: number; removed: number } }>("packs:play", id, { revision, offline });
       if (res.status === "blocked") setBlocked(res.blocked ?? []);
@@ -130,7 +132,9 @@ function PackView({ id, settings, goToAccounts, onChanged }: { id: string; setti
         setNotice(`Updated: ${res.sync.downloaded} file${res.sync.downloaded === 1 ? "" : "s"} fetched, ${res.sync.removed} removed. Everything else was already up to date.`);
       onChanged();
     } catch (e) {
-      setError((e as Error).message);
+      const message = (e as Error).message;
+      if (isPackKeyError(message)) setNeedKey({ offline });
+      else setError(message);
     } finally {
       setBusy(false);
       setProgress(null);
@@ -159,6 +163,7 @@ function PackView({ id, settings, goToAccounts, onChanged }: { id: string; setti
           {update.downloadBytes ? ` (about ${formatBytes(update.downloadBytes)} to download)` : ""}. The rest of the pack is kept.
         </div>
       )}
+      {needKey && <PackKeyPrompt onSaved={() => void play(needKey.offline)} />}
       {notice && <div className="notice">{notice}</div>}
       {progress && <ProgressBar p={progress} />}
       {error && <div className="error">{error}</div>}

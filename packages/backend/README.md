@@ -20,14 +20,14 @@ npm run bundle -w @remix/backend  # dist/server.mjs, what `npm run deploy` ships
 | `ADMIN_USERNAME` | `admin` | The admin account, created on start. |
 | `ADMIN_PASSWORD` | `dev` outside production | Sets the admin's password so they can sign in from the launcher. |
 | `CURSEFORGE_API_KEY` | none | Enables CurseForge bases. |
-| `PACK_KEY` | none (open) | Shared key launchers must send (`X-Pack-Key` header or `?key=`) to browse and download packs. Accounts don't need it. |
+| `PACK_KEY` | none (open) | Shared key every download request must carry (`X-Pack-Key` header or `?key=`): revisions, lockfiles and blobs. Browsing `/packs` is open, and accounts don't bypass the key. Evan hands it out separately; it's never built into the launcher. |
 
 ## API
 
 | Route | Who | |
 | --- | --- | --- |
 | `GET /health` | anyone | |
-| `GET /packs`, `GET /packs/:pack` | pack key | `:pack` is the id or slug |
+| `GET /packs`, `GET /packs/:pack` | none | `:pack` is the id or slug |
 | `GET /packs/:pack/revisions/:rev[/lockfile?side=server]` | pack key | `:rev` is a number or `latest` |
 | `GET /blobs/:xx/:sha256` | pack key | uploaded files |
 | `POST /accounts/register` `{code, username, password}` | anyone with an invite | → `{token, user}` |

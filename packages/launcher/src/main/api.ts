@@ -47,17 +47,22 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** The server's error code, e.g. "pack-key" when a download needs the shared key. */
+    readonly code?: string,
   ) {
     super(message);
   }
 }
 
-/** Client for the backend in packages/backend. Browsing needs no token; publishing needs an account. */
+/**
+ * Client for the backend in packages/backend. Browsing needs nothing; every download needs the
+ * shared pack key; publishing needs an account.
+ */
 export class Api {
   constructor(
     readonly baseUrl: string,
     private readonly token = "",
-    /** Shared key the server may require to browse and download packs. */
+    /** Shared key the server requires on every download (revisions, lockfiles, blobs). */
     private readonly packKey = "",
     private readonly fetcher: Fetcher = fetch,
   ) {}
@@ -78,8 +83,8 @@ export class Api {
       throw new ApiError(0, `Can't reach the pack server at ${base}. Is it running?`);
     });
     if (method === "HEAD") return (res.ok as unknown) as T;
-    const json = (await res.json().catch(() => ({}))) as T & { error?: string };
-    if (!res.ok) throw new ApiError(res.status, json.error ?? `HTTP ${res.status}`);
+    const json = (await res.json().catch(() => ({}))) as T & { error?: string; code?: string };
+    if (!res.ok) throw new ApiError(res.status, json.error ?? `HTTP ${res.status}`, json.code);
     return json;
   }
 
@@ -103,6 +108,15 @@ export class Api {
   }
   revision(id: string, rev: number | "latest") {
     return this.req<Revision>("GET", `/packs/${encodeURIComponent(id)}/revisions/${rev}`);
+  }
+  /**
+   * Throws ApiError with code "pack-key" if the server rejects this client's key. Browsing doesn't
+   * check the key, so this asks for a download (the latest lockfile of the first published pack).
+   * With nothing published yet there's nothing to check against, and the key is taken as is.
+   */
+  async checkPackKey() {
+    const pack = (await this.packs()).find((p) => p.latestRevision);
+    if (pack) await this.req("GET", `/packs/${encodeURIComponent(pack.id)}/revisions/latest/lockfile`);
   }
 
   // accounts (createInvite: admin only)
